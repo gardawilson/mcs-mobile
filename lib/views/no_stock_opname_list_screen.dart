@@ -91,46 +91,111 @@ class StockOpnameListScreen extends StatelessWidget {
               itemBuilder: (context, index) {
                 final stockOpname = viewModel.stockOpnameList[index];
 
-                return Card(
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => StockOpnameInputScreen(
-                            noSO: stockOpname.noSO,
-                            tgl: stockOpname.tgl,
-                          ),
+                return GestureDetector(
+                  onLongPress: () {
+                  },
+                  onTap: () {
+                    // Navigasi ke detail jika tidak dalam mode seleksi
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => StockOpnameInputScreen(
+                          noSO: stockOpname.noSO,
+                          tgl: stockOpname.tgl,
                         ),
-                      );
-                    },
+                      ),
+                    );
+                  },
+                  child: Card(
+                    elevation: 5,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            stockOpname.tgl,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF7a1b0c),
-                            ),
+                          // Header: NoSO and Tanggal
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // NoSO
+                              Text(
+                                stockOpname.noSO,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1a1a1a),
+                                ),
+                              ),
+                              // Tanggal
+                              Text(
+                                stockOpname.tgl,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.normal,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 5),
-                          Text(
-                            stockOpname.noSO,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
+                          const SizedBox(height: 10),
+
+                          // Divider
+                          const Divider(color: Colors.grey, thickness: 0.5),
+
+                          // Companies
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.business, color: Colors.blue, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    stockOpname.companies.join(', '),
+                                    style: const TextStyle(fontSize: 14, color: Colors.black),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
+
+                          // Categories
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.category, color: Colors.green, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    stockOpname.categories.join(', '),
+                                    style: const TextStyle(fontSize: 14, color: Colors.black),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                          // Locations
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.location_on, color: Colors.orange, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    stockOpname.locations.join(', '),
+                                    style: const TextStyle(fontSize: 14, color: Colors.black),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                       ),
                     ),
                   ),

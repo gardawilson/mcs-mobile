@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import '../view_models/stock_opname_input_view_model.dart';
+import '../view_models/master_data_view_model.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/add_manual_dialog.dart';
 import '../views/barcode_qr_scan_screen.dart';
-import 'package:searchfield/searchfield.dart';
-import 'package:flutter_searchable_dropdown/flutter_searchable_dropdown.dart';  // Import package
+import '../models/company_model.dart';
+import 'package:multi_select_flutter/multi_select_flutter.dart';
 
 
 
@@ -21,11 +22,12 @@ class StockOpnameInputScreen extends StatefulWidget {
 }
 
 class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
-  final Set<String> _selectedFilters = {}; // Menggunakan Set untuk menyimpan filter yang dipilih
+  Set<String> _selectedCompanies = {};
+  Set<String> _selectedCategories = {};
+  Set<String> _selectedLocations = {};
 
   final TextEditingController _locationController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  String? _selectedLocation;
   bool isLoadingMore = false;
 
   @override
@@ -58,41 +60,58 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
         ),
         automaticallyImplyLeading: false,
         backgroundColor: const Color(0xFF7a1b0c),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
+        // actions: [
+        //   IconButton(
+        //     icon: const Icon(Icons.filter_list, color: Colors.white),
+        //     onPressed: () => _showFilterModal(context), // Memanggil modal saat tombol ditekan
+        //   ),
+        // ],
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                // Ganti pemanggilan langsung dengan tombol atau widget interaktif
-                ElevatedButton(
-                  onPressed: () => _showFilterModal(context), // Memanggil modal saat tombol ditekan
-                  child: Text('Company'),
-                ),
-                SizedBox(width: 16),
-                // _buildLocationDropdown(),  // Menggunakan SearchableDropdown
-                SizedBox(width: 16),
-                _buildCountText(),  // Menampilkan count di sebelah kanan
-              ],
+          Material(
+            elevation: 1,  // Menambahkan efek bayangan
+            child: Padding(
+              padding: const EdgeInsets.all(1.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  // Filter Button
+                  ElevatedButton.icon(
+                    onPressed: () => _showFilterModal(context), // Memanggil modal saat tombol ditekan
+                    icon: Icon(Icons.filter_list, color: Colors.black, size: 24),
+                    label: Text(
+                      'Filters',
+                      style: TextStyle(color: Colors.black, fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,  // Membuat tombol transparan
+                      elevation: 0,  // Tanpa bayangan
+                      minimumSize: Size(100, 40),  // Ukuran minimum tombol agar tidak terlalu kecil
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  _buildCountText(),  // Menampilkan count di sebelah kanan
+                ],
+              ),
             ),
           ),
-
           Expanded(
             child: Consumer<StockOpnameInputViewModel>(
               builder: (context, viewModel, child) {
+                // Jika daftar asset kosong, tampilkan pesan data kosong
                 if (viewModel.assetList.isEmpty) {
-                  return const LoadingSkeleton();
-                }
+                  // Jika tidak ada data, beri pesan seperti "Data Kosong"
+                  if (viewModel.errorMessage.contains("404")) {
+                    return const Center(
+                      child: Text(
+                        'Tidak ada data ditemukan',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    );
+                  }
 
-                if (viewModel.errorMessage.isNotEmpty) {
+                  // Jika ada error, tampilkan pesan error
                   return Center(
                     child: Text(
                       viewModel.errorMessage,
@@ -100,7 +119,6 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
                     ),
                   );
                 }
-
 
                 return ListView.builder(
                   controller: _scrollController,
@@ -118,8 +136,14 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
 
                     if (index == viewModel.assetList.length + 1) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        viewModel.loadMoreAssets(widget.noSO);
+                        viewModel.loadMoreAssets(
+                          widget.noSO,
+                          companyFilters: _selectedCompanies.toList(), // ⬅️ kirim filter
+                          categoryFilters: _selectedCategories.toList(), // ⬅️ kirim filter
+                          locationFilters: _selectedLocations.toList(), // ⬅️ kirim filter
+                        );
                       });
+
                       return const Center(
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: 16),
@@ -132,20 +156,28 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: ListTile(
-                        title: Text('Asset Code: ${asset.assetCode}', style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Scanned By: ${asset.username}'),
+                        title: Text(
+                          asset.assetName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start, // Agar teks rata kiri
+                          children: [
+                            Text(asset.assetCode),
+                            Text('Checked By: ${asset.username}'),
+                          ],
+                        ),
                         leading: const Icon(Icons.inventory, color: Colors.blue),
                       ),
                     );
                   },
                 );
-
-
               },
             ),
           ),
         ],
       ),
+
       floatingActionButton: SpeedDial(
         animatedIcon: AnimatedIcons.menu_close,
         backgroundColor: const Color(0xFF7a1b0c),
@@ -165,7 +197,7 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
             child: const Icon(Icons.edit_note),
             label: 'Input Manual',
             onTap: () {
-              _showAddManualDialog(context);
+              // _showAddManualDialog(context);
             },
           ),
         ],
@@ -173,14 +205,10 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
     );
   }
 
-  // Daftar pilihan filter
-  final List<Map<String, String>> filterOptions = [
-    {'value': 'st', 'label': 'Company 1'},
-    {'value': 's4s', 'label': 'Company 2'},
-    {'value': 'fj', 'label': 'Company 3'},
-  ];
-
   void _showFilterModal(BuildContext context) {
+    final masterViewModel = Provider.of<MasterDataViewModel>(context, listen: false);
+    masterViewModel.fetchMasterData(); // Ganti dari fetchCompanies()
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -189,44 +217,157 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
           builder: (context, setModalState) {
             return Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Pilih Filter',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 16),
-                  // Membuat daftar pilihan filter menggunakan Checkbox
-                  ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: filterOptions.length,
-                    itemBuilder: (context, index) {
-                      final filter = filterOptions[index];
-                      return CheckboxListTile(
-                        title: Text(filter['label']!),
-                        value: _selectedFilters.contains(filter['value']!),  // Memastikan value checkbox sesuai dengan status filter
-                        onChanged: (bool? selected) {
+              child: Consumer<MasterDataViewModel>(
+                builder: (context, vm, _) {
+                  if (vm.isLoading) {
+                    return Center(child: CircularProgressIndicator());
+                  }
+
+                  if (vm.errorMessage.isNotEmpty) {
+                    return Center(child: Text('❌ ${vm.errorMessage}'));
+                  }
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Company',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        children: vm.companies.map((company) {
+                          final isSelected = _selectedCompanies.contains(company.companyId);
+                          return ChoiceChip(
+                            label: Text(company.companyName),
+                            selected: isSelected,
+                            selectedColor: Colors.blue.shade100,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.blue : Colors.black,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            onSelected: (selected) {
+                              setModalState(() {
+                                if (selected) {
+                                  _selectedCompanies.add(company.companyId);
+                                } else {
+                                  _selectedCompanies.remove(company.companyId);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      SizedBox(height: 24),
+                      Text(
+                        'Category',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        children: vm.categories.map((category) {
+                          final isSelected = _selectedCategories.contains(category.categoryCode);
+                          return ChoiceChip(
+                            label: Text(category.categoryName),
+                            selected: isSelected,
+                            selectedColor: Colors.green.shade100,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.green : Colors.black,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            onSelected: (selected) {
+                              setModalState(() {
+                                if (selected) {
+                                  _selectedCategories.add(category.categoryCode);
+                                } else {
+                                  _selectedCategories.remove(category.categoryCode);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      SizedBox(height: 24),
+                      // Location Section - Scrollable & Responsive
+                      Text(
+                        'Location',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      MultiSelectDialogField(
+                        items: vm.locations
+                            .map((loc) => MultiSelectItem(loc.locationCode, loc.locationName))
+                            .toList(),
+                        title: Text("Pilih Lokasi"),
+                        buttonText: Text("Klik untuk pilih lokasi"),
+                        initialValue: _selectedLocations.toList(),
+                        searchable: true,
+                        listType: MultiSelectListType.CHIP,
+                        onConfirm: (values) {
                           setModalState(() {
-                            if (selected == true) {
-                              _selectedFilters.add(filter['value']!); // Tambahkan filter jika dicentang
-                            } else {
-                              _selectedFilters.remove(filter['value']!); // Hapus filter jika tidak dicentang
-                            }
+                            _selectedLocations = values.toSet().cast<String>();
                           });
                         },
-                      );
-                    },
-                  ),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);  // Menutup modal setelah filter dipilih
-                      // Lakukan aksi setelah memilih filter, misalnya fetch data
-                    },
-                    child: Text('Terapkan Filter'),
-                  ),
-                ],
+                        chipDisplay: MultiSelectChipDisplay(
+                          scroll: true, // Aktifkan scroll
+                          height: 50, // Batasi tinggi untuk area scroll
+                          chipColor: Colors.orange.shade100, // Warna latar belakang chip yang tidak dipilih
+                          textStyle: TextStyle(
+                            color: Colors.orange,
+                          ),
+                        ),
+                        selectedColor: Colors.orange.shade100,
+                        selectedItemsTextStyle: TextStyle(
+                          color: Colors.orange,
+                        ),
+                        cancelText: Text("Batal"), // Mengubah teks tombol Cancel
+                        confirmText: Text("Pilih"), // Mengubah teks tombol Confirm (OK)
+                      ),
+
+
+                      const SizedBox(height: 24),
+                      Center(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            print("📦 Company: ${_selectedCompanies.join(', ')}");
+                            print("📂 Category: ${_selectedCategories.join(', ')}");
+                            print("📂 Location: ${_selectedLocations.join(', ')}");
+
+                            final viewModel = Provider.of<StockOpnameInputViewModel>(context, listen: false);
+                            viewModel.fetchAssets(
+                              widget.noSO,
+                              companyFilters: _selectedCompanies.toList(),
+                              categoryFilters: _selectedCategories.toList(),
+                              locationFilters: _selectedLocations.toList(),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF7a1b0c),
+                            minimumSize: Size(double.infinity, 48),  // Lebar penuh dan tinggi tombol
+                            padding: EdgeInsets.symmetric(vertical: 14),  // Padding vertikal yang lebih besar
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),  // Sudut tombol yang lebih membulat
+                            ),
+                          ),
+                          child: Text(
+                            'Terapkan Filter',  // Teks tombol
+                            style: TextStyle(
+                              fontSize: 16,  // Ukuran font
+                              fontWeight: FontWeight.bold,  // Menambah ketebalan teks
+                              color: Colors.white,  // Teks berwarna putih
+                            ),
+                          ),
+
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             );
           },
@@ -235,12 +376,12 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
     );
   }
 
+
   Widget _buildCountText() {
     // Asumsi count didapatkan dari jumlah item yang ada di blokList
     final count = Provider.of<StockOpnameInputViewModel>(context).totalAssets;
-
     return Text(
-      '$count Label', // Menampilkan jumlah item
+      '$count Assets', // Menampilkan jumlah item
       style: TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.bold,
@@ -261,23 +402,4 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
     );
   }
 
-  void _showAddManualDialog(BuildContext context) {
-    if (_selectedLocation == null || _selectedLocation == 'Semua') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fitur Dalam Tahap Pengembangan!')),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AddManualDialog(
-          noSO: widget.noSO,
-          selectedFilter: 'all',
-          idLokasi: _selectedLocation!,
-        );
-      },
-    );
-  }
 }

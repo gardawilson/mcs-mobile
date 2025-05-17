@@ -14,7 +14,6 @@ class StockOpnameInputViewModel extends ChangeNotifier {
   final int limit = 20; // Sesuaikan dengan limit di backend
   int totalAssets = 0; // total semua data dari backend
 
-
   List<AssetData> assetList = [];
 
   // Fungsi untuk mengambil token dari SharedPreferences
@@ -23,7 +22,7 @@ class StockOpnameInputViewModel extends ChangeNotifier {
     return prefs.getString('token');
   }
 
-  Future<void> fetchAssets(String selectedNoSO, {bool loadMore = false}) async {
+  Future<void> fetchAssets(String selectedNoSO, {bool loadMore = false, List<String>? companyFilters, List<String>? categoryFilters, List<String>? locationFilters}) async {
     if (!loadMore) {
       // Reset state untuk load baru
       isLoading = true;
@@ -41,7 +40,18 @@ class StockOpnameInputViewModel extends ChangeNotifier {
     print("📡 Fetching assets for NoSO: $selectedNoSO, offset: $currentOffset");
 
     try {
-      final url = Uri.parse('${ApiConstants.listAssets(selectedNoSO)}?offset=$currentOffset');
+      final uri = Uri.parse('${ApiConstants.listAssets(selectedNoSO)}').replace(
+        queryParameters: {
+          'offset': '$currentOffset',
+          if (companyFilters != null && companyFilters.isNotEmpty)
+            'company': companyFilters.join(','),
+          if (categoryFilters != null && categoryFilters.isNotEmpty)
+            'category': categoryFilters.join(','),
+          if (locationFilters != null && locationFilters.isNotEmpty)
+            'location': locationFilters.join(','),
+        },
+      );
+
       String? token = await _getToken();
 
       final headers = {
@@ -49,7 +59,7 @@ class StockOpnameInputViewModel extends ChangeNotifier {
         'Authorization': 'Bearer $token',
       };
 
-      final response = await http.get(url, headers: headers);
+      final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
@@ -71,8 +81,9 @@ class StockOpnameInputViewModel extends ChangeNotifier {
         hasMore = responseData['hasMore'] ?? (newAssets.length == limit);
 
         errorMessage = '';
-        print("✅ Data berhasil dimuat: ${assetList.length} assets");
+        print("✅ Data berhasil dimuat: $totalAssets} assets");
       } else {
+        totalAssets = 0;
         errorMessage = 'Gagal memuat data (${response.statusCode})';
       }
     } catch (e) {
@@ -84,8 +95,8 @@ class StockOpnameInputViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> loadMoreAssets(String selectedNoSO) async {
+  Future<void> loadMoreAssets(String selectedNoSO, {List<String>? companyFilters, List<String>? categoryFilters, List<String>? locationFilters}) async {
     if (!hasMore || isFetchingMore) return;
-    await fetchAssets(selectedNoSO, loadMore: true);
+    await fetchAssets(selectedNoSO, loadMore: true, companyFilters: companyFilters, categoryFilters: categoryFilters, locationFilters: locationFilters);
   }
 }

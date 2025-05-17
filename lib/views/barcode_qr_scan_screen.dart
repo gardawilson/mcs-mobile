@@ -169,13 +169,12 @@ class _BarcodeQrScanScreenState extends State<BarcodeQrScanScreen> with SingleTi
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final scanAreaSize = screenWidth * 0.6;
-    final count = Provider.of<StockOpnameInputViewModel>(context).assetList.length;
+    final count = Provider.of<StockOpnameInputViewModel>(context).totalAssets;
 
 
     return Scaffold(
