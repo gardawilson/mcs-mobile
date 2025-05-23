@@ -1,6 +1,7 @@
 import 'dart:async'; // Import Timer
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:mcs_mobile/widgets/bom_list_dialog.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -85,81 +86,63 @@ class _BarcodeQrScanScreenState extends State<BarcodeQrScanScreen> with SingleTi
     super.dispose();
   }
 
-  void _processScanResult(String rawValue) async  {
-    if (rawValue != _lastScannedCode) { // Hanya proses jika kode berbeda
-      _lastScannedCode = rawValue; // Update kode terakhir
+  void _processScanResult(String rawValue) async {
+    if (rawValue != _lastScannedCode) {
+      _lastScannedCode = rawValue;
       final viewModel = Provider.of<ScanProcessorViewModel>(context, listen: false);
+
       viewModel.processScannedCode(
         rawValue,
         widget.noSO,
-        onSaveComplete: (success, statusCode, message) {
-
-          if (statusCode == 404 || statusCode == 409) {
-            // Menangani statusCode 404 atau 409
-
-            // Memutar suara denied.mp3 dengan kecepatan 2x
-            _audioPlayer.setPlaybackRate(2.0); // Kecepatan 2x
-            _audioPlayer.play(AssetSource('sounds/denied.mp3'));
-            Vibration.vibrate(duration: 1000);
-
-            viewModel.processScannedCode(
-              rawValue,
-              widget.noSO,
-              onSaveComplete: (success, statusCode, message) {
-
-                setState(() {
-                  _isSaving = false;
-                  _saveMessage = message; // Gabungkan pesan dan hasil scan
-                });
-
-                if (success) {
-                  final viewModel = Provider.of<StockOpnameInputViewModel>(context, listen: false);
-                  viewModel.fetchAssets(
-                      widget.noSO
-                  );
-
-                  // Hapus pesan setelah beberapa detik
-                  Future.delayed(const Duration(seconds: 3), () {
-                    setState(() {
-                      _saveMessage = '';
-                    });
-                    _lastScannedCode = null; // Reset setelah pesan hilang
-                  });
-
-                } else {
-                  // Hapus pesan setelah beberapa detik
-                  Future.delayed(const Duration(seconds: 3), () {
-                    setState(() {
-                      _saveMessage = '';
-                    });
-                    _lastScannedCode = null; // Reset setelah pesan hilang
-                  });
-                }
-              },
-            );
-          } else if (statusCode == 201 || statusCode == 200) {
-
-            // Memutar suara accepted.mp3 dengan kecepatan 2x
-            _audioPlayer.setPlaybackRate(2.0); // Kecepatan 2x
+        onResult: (result) {
+          if (result.success && result.statusCode == 201) {
+            _audioPlayer.setPlaybackRate(2.0);
             _audioPlayer.play(AssetSource('sounds/accepted.mp3'));
 
-            final viewModel = Provider.of<StockOpnameInputViewModel>(
-                context, listen: false);
-            viewModel.fetchAssets(
-                widget.noSO
-            );
+            final stockVM = Provider.of<StockOpnameInputViewModel>(context, listen: false);
+            stockVM.fetchAssets(widget.noSO);
 
             setState(() {
               _isSaving = false;
-              _saveMessage = message;
+              _saveMessage = result.message;
             });
 
-            // Hapus pesan setelah beberapa detik
             Future.delayed(const Duration(seconds: 3), () {
               setState(() {
                 _saveMessage = '';
               });
-              _lastScannedCode = null; // Reset setelah pesan hilang
+              _lastScannedCode = null;
+            });
+
+          } else if (result.statusCode == 200 && result.parts != null) {
+            showDialog(
+              context: context,
+              builder: (_) => BomListDialog(
+                message: result.message,
+                parts: result.parts ?? [],
+                noSO: widget.noSO,
+                assetCode: result.assetCode ?? '',
+                assetName: result.assetName ?? '',
+              ),
+            );
+
+
+          } else {
+            // Gagal scan, mainkan denied.mp3 dan vibrasi
+            _audioPlayer.setPlaybackRate(2.0);
+            _audioPlayer.play(AssetSource('sounds/denied.mp3'));
+            Vibration.vibrate(duration: 1000);
+
+            setState(() {
+              _isSaving = false;
+              _saveMessage = result.message;
+            });
+
+            Future.delayed(const Duration(seconds: 3), () {
+              setState(() {
+                _saveMessage = '';
+              });
+              _lastScannedCode = null;
             });
           }
         },
@@ -168,6 +151,7 @@ class _BarcodeQrScanScreenState extends State<BarcodeQrScanScreen> with SingleTi
       debugPrint('Duplicate scan detected, skipping.');
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

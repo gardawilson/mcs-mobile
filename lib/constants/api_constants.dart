@@ -7,6 +7,7 @@ class ApiConstants {
   static String get login => '$baseUrl/api/login';
   static String get listNoSO => '$baseUrl/api/no-stock-opname';
   static String get masterCompany => '$baseUrl/api/master-company';
-  static String scanAsset(String noSO) => '$baseUrl/api/no-stock-opname/$noSO';
+  static String scanAssetCheck(String noSO) => '$baseUrl/api/no-stock-opname/$noSO/check';
+  static String scanAssetSubmit(String noSO) => '$baseUrl/api/no-stock-opname/$noSO/submit';
   static String listAssets(String selectedNoSO) => '$baseUrl/api/no-stock-opname/$selectedNoSO';
 }

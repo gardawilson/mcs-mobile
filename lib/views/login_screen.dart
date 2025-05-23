@@ -187,200 +187,169 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Deteksi apakah keyboard sedang muncul
+    double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    bool isKeyboardVisible = keyboardHeight > 0;
+
     return Scaffold(
-      resizeToAvoidBottomInset: true, // Pastikan ini true
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // Background coklat penuh di belakang
+          // Gradient Background
           Container(
-            width: double.infinity,
-            height: double.infinity,
-            color: Color(0xFF7a1b0c),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF6D4D8C), // purple tone
+                  Color(0xFFF9A825), // amber/orange tone
+                ],
+              ),
+            ),
           ),
 
-          // Top section (header) dengan logo di depan background coklat
+          // Welcome text
           Positioned(
-            top: 0,
+            top: 120,
             left: 0,
             right: 0,
-            child: Container(
-              height: 220,
-              width: double.infinity,
-              color: Colors.transparent, // Menggunakan transparan agar background coklat tetap terlihat
-              child: Center(
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              // Sembunyikan welcome text ketika keyboard muncul (opsional)
+              opacity: isKeyboardVisible ? 0.0 : 1.0,
+              child: Text(
+                'Welcome to MCS!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 32,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+
+          // Centered login card dengan animasi untuk keyboard
+          AnimatedPadding(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            // Geser ke atas ketika keyboard muncul
+            padding: EdgeInsets.only(
+              bottom: isKeyboardVisible ? keyboardHeight * 0.7 : 0,
+            ),
+            child: Center(
+              child: SingleChildScrollView(
                 child: Container(
-                  width: 60,
-                  height: 60,
+                  width: 400,
+                  height: 450,
+                  margin: const EdgeInsets.symmetric(horizontal: 32),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Transform.scale(
-                      scale: 3.0, // Atur angka ini untuk zoom gambar
-                      child: ColorFiltered(
-                        colorFilter: ColorFilter.mode(Colors.white.withOpacity(1.0), BlendMode.srcATop),
-                        child: Image.asset(
-                          'assets/images/icon_without_bg.png',  // Ganti dengan path logo Anda
-                          fit: BoxFit.contain,
+                  child: Column(
+                    children: [
+                      Image.asset(
+                        'assets/images/icon_without_bg.png',
+                        width: 120,
+                        height: 120,
+                      ),
+
+                      Divider(
+                        color: Colors.grey,      // Warna garis
+                        thickness: 0.5,            // Ketebalan garis
+                        height: 25,              // Tinggi space yang ditempati
+                      ),
+
+                      const SizedBox(height: 24),
+                      TextField(
+                        controller: _usernameController,
+                        decoration: InputDecoration(
+                          labelText: 'Username',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _passwordController,
+                        obscureText: !_isPasswordVisible,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                      if (_errorMessage.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            _errorMessage,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _login,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFd30000),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : const Text('Login'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
 
-          // Halaman login di depan background coklat
+          // Copyright - tetap di posisi bawah
           Positioned(
-            top: MediaQuery.of(context).size.height * 0.25,
+            bottom: 20,
             left: 0,
             right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 20),
-                    const Center(
-                      child: Text(
-                        'Halaman Login',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-
-                    // Username Field
-                    const Text(
-                      'Username',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _usernameController,
-                      onChanged: (_) => _clearErrorMessage(),
-                      decoration: InputDecoration(
-                        hintText: 'Username',
-                        hintStyle: TextStyle(color: Colors.grey.shade400),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Password Field
-                    const Text(
-                      'Password',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: !_isPasswordVisible,
-                      onChanged: (_) => _clearErrorMessage(),
-                      decoration: InputDecoration(
-                        hintText: '••••••••',
-                        hintStyle: TextStyle(color: Colors.grey.shade400),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                            color: Colors.grey.shade600,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-
-                    // Error Message
-                    if (_errorMessage.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12.0),
-                        child: Text(
-                          _errorMessage,
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-
-                    const SizedBox(height: 24),
-
-                    // Login Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _login,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF7a1b0c),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: _isLoading
-                            ? const CircularProgressIndicator(color: Colors.white)
-                            : const Text(
-                          'Login',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              // Sembunyikan copyright ketika keyboard muncul (opsional)
+              opacity: isKeyboardVisible ? 0.0 : 1.0,
+              child: Text(
+                'Copyright © 2025, Utama Corporation\nAll rights reserved.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.8),
+                  fontSize: 12,
                 ),
               ),
             ),
