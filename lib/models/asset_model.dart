@@ -3,7 +3,6 @@ class AssetData {
   final String username;
   final String assetName;
 
-
   AssetData({
     required this.assetCode,
     required this.username,
@@ -12,9 +11,21 @@ class AssetData {
 
   factory AssetData.fromJson(Map<String, dynamic> json) {
     return AssetData(
-      assetCode: json['AssetCode'] ?? 'Unknown',  // Beri nilai default jika null
-      username: json['Username'] ?? 'No User',    // Beri nilai default jika null
-      assetName: json['AssetName'] ?? 'Unknown',    // Beri nilai default jika null
+      assetCode: json['AssetCode'] ?? 'Unknown',
+      username: json['Username'] ?? 'Unknown',
+      assetName: json['AssetName'] ?? 'Unknown',
+    );
+  }
+
+  AssetData copyWith({
+    String? assetCode,
+    String? username,
+    String? assetName,
+  }) {
+    return AssetData(
+      assetCode: assetCode ?? this.assetCode,
+      username: username ?? this.username,
+      assetName: assetName ?? this.assetName,
     );
   }
 }

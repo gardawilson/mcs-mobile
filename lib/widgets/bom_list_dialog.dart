@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../view_models/scan_processor_view_model.dart';
+import '../view_models/stock_opname_input_bom_view_model.dart';
 import '../models/bom_part_model.dart';
 
 class BomListDialog extends StatefulWidget {
@@ -52,7 +52,7 @@ class _BomListDialogState extends State<BomListDialog> {
     }
 
 
-    final viewModel = Provider.of<ScanProcessorViewModel>(context, listen: false);
+    final viewModel = Provider.of<StockOpnameInputBOMViewModel>(context, listen: false);
     final result = await viewModel.submitAssetWithParts(
       noSO: widget.noSO,
       assetCode: widget.assetCode,

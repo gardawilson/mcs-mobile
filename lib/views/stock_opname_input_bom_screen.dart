@@ -1,27 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
-import '../view_models/stock_opname_input_view_model.dart';
+import '../view_models/stock_opname_input_bom_view_model.dart';
 import '../view_models/master_data_view_model.dart';
 import '../widgets/loading_skeleton.dart';
 import '../widgets/add_manual_dialog.dart';
 import '../views/barcode_qr_scan_screen.dart';
+import '../views/asset_bom_view.dart';
 import '../models/company_model.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
 
 
-
-class StockOpnameInputScreen extends StatefulWidget {
+class StockOpnameInputBOMScreen extends StatefulWidget {
   final String noSO;
   final String tgl;
 
-  const StockOpnameInputScreen({Key? key, required this.noSO, required this.tgl}) : super(key: key);
+  const StockOpnameInputBOMScreen({Key? key, required this.noSO, required this.tgl}) : super(key: key);
 
   @override
-  _StockOpnameInputScreenState createState() => _StockOpnameInputScreenState();
+  _StockOpnameInputBOMScreenState createState() => _StockOpnameInputBOMScreenState();
 }
 
-class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
+class _StockOpnameInputBOMScreenState extends State<StockOpnameInputBOMScreen> {
   Set<String> _selectedCompanies = {};
   Set<String> _selectedCategories = {};
   Set<String> _selectedLocations = {};
@@ -33,7 +33,7 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
   @override
   void initState() {
     super.initState();
-    final viewModel = Provider.of<StockOpnameInputViewModel>(context, listen: false);
+    final viewModel = Provider.of<StockOpnameInputBOMViewModel>(context, listen: false);
 
     // Memanggil fetchData() untuk memuat data lokasi
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -55,7 +55,7 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          '${widget.tgl} ( ${widget.noSO} )',
+          '${widget.tgl} ( ${widget.noSO} ) BOM',
           style: const TextStyle(color: Colors.white),
         ),
         automaticallyImplyLeading: false,
@@ -97,7 +97,7 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
             ),
           ),
           Expanded(
-            child: Consumer<StockOpnameInputViewModel>(
+            child: Consumer<StockOpnameInputBOMViewModel>(
               builder: (context, viewModel, child) {
                 // Jika daftar asset kosong, tampilkan pesan data kosong
                 if (viewModel.assetList.isEmpty) {
@@ -156,18 +156,47 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: ListTile(
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AssetBOMPage(
+                                noSO: widget.noSO,
+                                assetCode: asset.assetCode,
+                                hasSubmitted: asset.username != null && asset.username!.isNotEmpty,
+                              ),
+                            ),
+                          );
+
+                          if (result == true) {
+                            await viewModel.fetchAssets(
+                              widget.noSO,
+                              companyFilters: _selectedCompanies.toList(),
+                              categoryFilters: _selectedCategories.toList(),
+                              locationFilters: _selectedLocations.toList(),
+                            );
+                          }
+                        },
+
                         title: Text(
                           asset.assetName,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start, // Agar teks rata kiri
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(asset.assetCode),
-                            Text('Scanned By: ${asset.username}'),
+                            if (asset.username != null && asset.username.isNotEmpty)
+                              Text(
+                                'Submitted by ${asset.username}',
+                                style: const TextStyle(fontStyle: FontStyle.italic),
+                              ),
                           ],
                         ),
                         leading: const Icon(Icons.inventory, color: Colors.blue),
+                        trailing: asset.username != null && asset.username.isNotEmpty
+                            ? const Icon(Icons.check_circle, color: Colors.green)
+                            : null,
                       ),
                     );
                   },
@@ -338,7 +367,7 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
                             print("📂 Category: ${_selectedCategories.join(', ')}");
                             print("📂 Location: ${_selectedLocations.join(', ')}");
 
-                            final viewModel = Provider.of<StockOpnameInputViewModel>(context, listen: false);
+                            final viewModel = Provider.of<StockOpnameInputBOMViewModel>(context, listen: false);
                             viewModel.fetchAssets(
                               widget.noSO,
                               companyFilters: _selectedCompanies.toList(),
@@ -379,7 +408,7 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
 
   Widget _buildCountText() {
     // Asumsi count didapatkan dari jumlah item yang ada di blokList
-    final count = Provider.of<StockOpnameInputViewModel>(context).totalAssets;
+    final count = Provider.of<StockOpnameInputBOMViewModel>(context).totalAssets;
     return Text(
       '$count Assets', // Menampilkan jumlah item
       style: TextStyle(
@@ -396,7 +425,7 @@ class _StockOpnameInputScreenState extends State<StockOpnameInputScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => BarcodeQrScanScreen(
-          noSO: widget.noSO
+            noSO: widget.noSO
         ),
       ),
     );

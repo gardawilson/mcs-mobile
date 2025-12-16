@@ -1,326 +1,525 @@
-import 'dart:async'; // Import Timer
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:mcs_mobile/widgets/bom_list_dialog.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import '../view_models/stock_opname_input_view_model.dart';
-import '../view_models/scan_processor_view_model.dart';
-import 'package:flutter/foundation.dart';
-import '../widgets/not_found_dialog.dart'; // Import widget NotFoundDialog
 import 'package:vibration/vibration.dart';
 import 'package:audioplayers/audioplayers.dart';
 
+import '../view_models/stock_opname_input_view_model.dart';
+import '../view_models/scan_processor_view_model.dart';
 
-
+/// Tahap UI untuk indikator visual
+enum UiStage { idle, detected, checking, submitting, success, error }
 
 class BarcodeQrScanScreen extends StatefulWidget {
   final String noSO;
 
-
-
   const BarcodeQrScanScreen({Key? key, required this.noSO}) : super(key: key);
 
   @override
-  _BarcodeQrScanScreenState createState() => _BarcodeQrScanScreenState();
+  State<BarcodeQrScanScreen> createState() => _BarcodeQrScanScreenState();
 }
 
-class _BarcodeQrScanScreenState extends State<BarcodeQrScanScreen> with SingleTickerProviderStateMixin {
-  final MobileScannerController cameraController = MobileScannerController();
-  String? _scanResult;
-  bool isFlashOn = false;
-  bool hasCameraPermission = false;
-  late AnimationController _animationController;
-  bool _isDetected = false;
+class _BarcodeQrScanScreenState extends State<BarcodeQrScanScreen>
+    with SingleTickerProviderStateMixin {
+
+  /// CONTROLLER kamera yang sudah dituning:
+  /// - formats: QR only
+  /// - detectionSpeed: unrestricted (no throttling)
+  /// - detectionTimeoutMs: 0 (jangan jeda internal)
+  /// - cameraResolution: coba "high" dulu (fps bagus), kalau QR kecil sulit → "veryHigh"
+  final MobileScannerController cameraController = MobileScannerController(
+    facing: CameraFacing.back,
+    torchEnabled: false,
+    detectionSpeed: DetectionSpeed.unrestricted,
+    detectionTimeoutMs: 0,
+    formats: const [BarcodeFormat.qrCode],
+
+    // ✅ gunakan Size, bukan Resolution
+    // Opsi A: FPS cenderung lebih tinggi, cocok QR medium/besar
+    // cameraResolution: const Size(1280, 720),
+
+    // Opsi B: Detail lebih tajam untuk QR kecil/blur (mungkin FPS turun)
+    cameraResolution: const Size(1920, 1080),
+  );
+
   final AudioPlayer _audioPlayer = AudioPlayer();
 
+  bool hasCameraPermission = false;
+  bool isFlashOn = false;
 
-  bool _isSaving = false; // State untuk loading
-  String _saveMessage = ''; // State untuk pesan
+  String? _lastScannedCode;
+  String _statusMessage = '';
+  UiStage _stage = UiStage.idle;
 
-  Timer? _debounceTimer; // Timer untuk debouncing
-  String? _lastScannedCode; // Kode yang terakhir diproses
+  // tidak dipakai lagi untuk debounce panjang, tetap disiapkan bila perlu cooldown singkat
+  Timer? _cooldownTimer;
+  bool _cooldownActive = false;
+
+  late final AnimationController _laserController;
 
   @override
   void initState() {
     super.initState();
     _getCameraPermission();
-
-
-
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 200),
+    _laserController = AnimationController(
       vsync: this,
-    )..repeat(reverse: true);
-  }
-
-
-
-  Future<void> _getCameraPermission() async {
-    final status = await Permission.camera.request();
-    setState(() {
-      hasCameraPermission = status == PermissionStatus.granted;
-    });
-
-    if (status == PermissionStatus.denied) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Izin kamera ditolak. Buka pengaturan aplikasi untuk memberikan izin.'),
-          action: SnackBarAction(
-            label: 'Buka Pengaturan',
-            onPressed: () {
-              openAppSettings();
-            },
-          ),
-        ),
-      );
-    }
+      duration: const Duration(seconds: 2),
+    )..repeat();
   }
 
   @override
   void dispose() {
     cameraController.dispose();
-    _animationController.dispose();
-    _debounceTimer?.cancel(); // Batalkan timer jika ada
+    _laserController.dispose();
+    _cooldownTimer?.cancel();
     super.dispose();
   }
 
-  void _processScanResult(String rawValue) async {
-    if (rawValue != _lastScannedCode) {
-      _lastScannedCode = rawValue;
-      final viewModel = Provider.of<ScanProcessorViewModel>(context, listen: false);
+  Future<void> _getCameraPermission() async {
+    final status = await Permission.camera.request();
+    if (!mounted) return;
+    setState(() => hasCameraPermission = status == PermissionStatus.granted);
 
-      viewModel.processScannedCode(
-        rawValue,
-        widget.noSO,
-        onResult: (result) {
-          if (result.success && result.statusCode == 201) {
-            _audioPlayer.setPlaybackRate(2.0);
-            _audioPlayer.play(AssetSource('sounds/accepted.mp3'));
-
-            final stockVM = Provider.of<StockOpnameInputViewModel>(context, listen: false);
-            stockVM.fetchAssets(widget.noSO);
-
-            setState(() {
-              _isSaving = false;
-              _saveMessage = result.message;
-            });
-
-            Future.delayed(const Duration(seconds: 3), () {
-              setState(() {
-                _saveMessage = '';
-              });
-              _lastScannedCode = null;
-            });
-
-          } else if (result.statusCode == 200 && result.parts != null) {
-            showDialog(
-              context: context,
-              builder: (_) => BomListDialog(
-                message: result.message,
-                parts: result.parts ?? [],
-                noSO: widget.noSO,
-                assetCode: result.assetCode ?? '',
-                assetName: result.assetName ?? '',
-              ),
-            );
-
-
-          } else {
-            // Gagal scan, mainkan denied.mp3 dan vibrasi
-            _audioPlayer.setPlaybackRate(2.0);
-            _audioPlayer.play(AssetSource('sounds/denied.mp3'));
-            Vibration.vibrate(duration: 1000);
-
-            setState(() {
-              _isSaving = false;
-              _saveMessage = result.message;
-            });
-
-            Future.delayed(const Duration(seconds: 3), () {
-              setState(() {
-                _saveMessage = '';
-              });
-              _lastScannedCode = null;
-            });
-          }
-        },
+    if (status == PermissionStatus.denied) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Izin kamera ditolak. Buka Pengaturan untuk mengaktifkan.'),
+          action: SnackBarAction(
+            label: 'Pengaturan',
+            onPressed: openAppSettings,
+          ),
+        ),
       );
-    } else {
-      debugPrint('Duplicate scan detected, skipping.');
     }
   }
 
+  void _onDetect(String code) async {
+    // Jangan ganggu kalau lagi proses submit/cek
+    if (_stage == UiStage.checking || _stage == UiStage.submitting) return;
+
+    // Cegah duplikasi kode yang sama beruntun
+    if (code == _lastScannedCode) return;
+
+    // Cooldown sangat singkat agar tidak "berondong"
+    if (_cooldownActive) return;
+    _cooldownActive = true;
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer(const Duration(milliseconds: 100), () {
+      _cooldownActive = false;
+    });
+
+    _lastScannedCode = code;
+    _setStage(UiStage.detected, msg: 'QR terdeteksi');
+
+    // Feedback instan biar terasa nempel (bunyi pendek optional jika ada asset)
+    Vibration.vibrate(duration: 40);
+
+    // LANGSUNG proses (tanpa debounce 250ms)
+    _startProcess(code);
+  }
+
+  void _startProcess(String rawValue) {
+    final vm = Provider.of<ScanProcessorViewModel>(context, listen: false);
+
+    vm.processScannedCode(
+      rawValue,
+      widget.noSO,
+      onStage: (stg) {
+        if (stg == ScanStage.checking) {
+          _setStage(UiStage.checking, msg: 'Memeriksa data...');
+        } else if (stg == ScanStage.submitting) {
+          _setStage(UiStage.submitting, msg: 'Menyimpan hasil...');
+        }
+      },
+      onResult: (result) async {
+        if (result.success && result.statusCode == 201) {
+          await _audioPlayer.play(AssetSource('sounds/accepted.mp3'));
+          Vibration.vibrate(duration: 120);
+          // refresh list
+          Provider.of<StockOpnameInputViewModel>(context, listen: false)
+              .fetchAssets(widget.noSO);
+          _setStage(UiStage.success, msg: result.message);
+        } else {
+          await _audioPlayer.play(AssetSource('sounds/denied.mp3'));
+          Vibration.vibrate(duration: 600);
+          _setStage(
+            UiStage.error,
+            msg: result.message.isNotEmpty ? result.message : 'Gagal memproses',
+          );
+        }
+
+        // Kembali ke idle setelah indikator tampil
+        Future.delayed(const Duration(milliseconds: 1600), _reset);
+      },
+    );
+  }
+
+  void _reset() {
+    if (!mounted) return;
+    setState(() {
+      _stage = UiStage.idle;
+      _statusMessage = '';
+      _lastScannedCode = null;
+    });
+  }
+
+  void _setStage(UiStage s, {String? msg}) {
+    if (!mounted) return;
+    setState(() {
+      _stage = s;
+      if (msg != null) _statusMessage = msg;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final scanAreaSize = screenWidth * 0.6;
-    final count = Provider.of<StockOpnameInputViewModel>(context).totalAssets;
+    final total = Provider.of<StockOpnameInputViewModel>(context).totalAssets;
+    final size = MediaQuery.of(context).size;
 
+    // Sedikit lebih kecil dari sebelumnya supaya analisa lebih fokus
+    final scanBox = size.width * 0.6;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(
-          'Total : ${count}',
-          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          'Total : $total',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white, // Set background color to white
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black), // Set icon color to black
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: Icon(
-              isFlashOn ? Icons.flash_off : Icons.flash_on,
-              color: Colors.black, // Set the icon color to black
-            ),
+            tooltip: isFlashOn ? 'Matikan flash' : 'Nyalakan flash',
+            icon: Icon(isFlashOn ? Icons.flash_off : Icons.flash_on, color: Colors.white),
             onPressed: () async {
-              setState(() {
-                isFlashOn = !isFlashOn;
-              });
-
-              // Toggle torch (flashlight)
-              cameraController.toggleTorch();
+              setState(() => isFlashOn = !isFlashOn);
+              await cameraController.toggleTorch();
             },
           ),
+          const SizedBox(width: 6),
         ],
       ),
       body: Stack(
         children: [
-          if (hasCameraPermission)
-            MobileScanner(
-              controller: cameraController,
-              scanWindow: Rect.fromCenter(
-                center: Offset(screenWidth / 2, screenHeight / 2),
-                width: scanAreaSize,
-                height: scanAreaSize,
+          // Background gradient (statik, murah)
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              onDetect: (capture) {
-                try {
-                  final List<Barcode> barcodes = capture.barcodes;
-                  if (barcodes.isNotEmpty && barcodes.first != null) {
-                    final String? rawValue = barcodes.first.rawValue; // Simpan rawValue di variabel lokal
-                    if (rawValue != null && !_isDetected) { // Pastikan rawValue tidak null
-                      setState(() {
-                        _scanResult = rawValue;
-                        _isDetected = true;
-                      });
-                      _animationController.forward(from: 0);
+            ),
+          ),
 
-                      if (_debounceTimer?.isActive ?? false) _debounceTimer?.cancel();
-                      _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-                        setState(() {
-                          _isDetected = false;
-                        });
-                        _processScanResult(rawValue); // Panggil fungsi pemrosesan
-                      });
-                    }
+          // PREVIEW KAMERA — dibungkus RepaintBoundary untuk kurangi jank
+          if (hasCameraPermission)
+            RepaintBoundary(
+              child: MobileScanner(
+                controller: cameraController,
+                fit: BoxFit.cover,
+                scanWindow: Rect.fromCenter(
+                  center: Offset(size.width / 2, size.height / 2),
+                  width: scanBox,
+                  height: scanBox,
+                ),
+                onDetect: (capture) {
+                  try {
+                    final code = capture.barcodes.isNotEmpty
+                        ? capture.barcodes.first.rawValue
+                        : null;
+                    if (code != null) _onDetect(code);
+                  } catch (e) {
+                    debugPrint('detect error: $e');
                   }
-                  else {
-                    setState(() {
-                      _scanResult = null;
-                      _isDetected = false;
-                    });
-                  }
-                } catch (e) {
-                  debugPrint('Error during barcode detection: $e');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Terjadi kesalahan saat memproses barcode.')),
-                  );
-                }
-              },
+                },
+              ),
             )
           else
             Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Izin kamera diperlukan untuk memindai.'),
-                  ElevatedButton(
-                    onPressed: () {
-                      _getCameraPermission();
-                    },
-                    child: const Text('Minta Izin Kamera'),
-                  ),
-                ],
+              child: ElevatedButton(
+                onPressed: _getCameraPermission,
+                child: const Text('Aktifkan izin kamera'),
               ),
             ),
 
-          // Tampilan Status
-          Positioned(
-            bottom: 50, // Atur jarak dari bawah
-            left: 0,
-            right: 0,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: _isSaving
-                  ? const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              )
-                  : _saveMessage.isNotEmpty
-                  ? Container(
-                padding: const EdgeInsets.all(8),
-                margin: const EdgeInsets.symmetric(horizontal: 20), // Tambahkan margin horizontal
-                decoration: BoxDecoration(
-                  color: _saveMessage.contains('berhasil') ? Colors.green : Colors.red,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _saveMessage,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
-                ),
-              )
-                  : const SizedBox.shrink(),
-            ),
-          ),
-
-          // Ikon Status (check.png atau cross.png)
-          if (_saveMessage.isNotEmpty) // Hanya tampilkan ikon jika ada pesan
-            Positioned(
-              top: 150, // Atur jarak dari bawah (sesuaikan dengan kebutuhan)
-              left: 0,
-              right: 0,
-              child: Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: _saveMessage.contains('berhasil')
-                      ? Image.asset(
-                    'assets/images/check.png', // Path ke check.png
-                    key: const ValueKey('check'),
-                    width: 120, // Sesuaikan ukuran ikon
-                    height: 120,
-                  )
-                      : Image.asset(
-                    'assets/images/cross.png', // Path ke cross.png
-                    key: const ValueKey('cross'),
-                    width: 80, // Sesuaikan ukuran ikon
-                    height: 80,
-                  ),
-                ),
-              ),
-            ),
-
-          // Box Decoration (tidak diubah)
+          // FRAME + LASER — juga RepaintBoundary agar tidak bikin preview repaint
           Align(
             alignment: Alignment.center,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: scanAreaSize,
-              height: scanAreaSize,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _isDetected ? Colors.greenAccent.withOpacity(0.8) : Colors.white.withOpacity(0.2),
-                  width: 3,
+            child: RepaintBoundary(
+              child: SizedBox(
+                width: scanBox,
+                height: scanBox,
+                child: Stack(
+                  children: [
+                    // Kotak border utuh (square)
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.zero,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.95),
+                          width: 2.2,
+                        ),
+                      ),
+                    ),
+                    // Laser animasi
+                    AnimatedBuilder(
+                      animation: _laserController,
+                      builder: (_, __) {
+                        final top = _laserController.value * (scanBox - 2.0);
+                        return Positioned(
+                          top: top,
+                          left: 8,
+                          right: 8,
+                          child: Container(
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
+
+          // Step indicator (Detected → Checking → Submitting)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 56,
+            left: 16,
+            right: 16,
+            child: _buildStepChips(),
+          ),
+
+          // Overlay loading per tahap (blur kecil agar murah)
+          if (_stage == UiStage.detected ||
+              _stage == UiStage.checking ||
+              _stage == UiStage.submitting)
+            const _StageOverlay(),
+
+          // Ikon hasil
+          if (_stage == UiStage.success || _stage == UiStage.error)
+            Center(
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 200),
+                scale: 1.0,
+                child: Image.asset(
+                  _stage == UiStage.success
+                      ? 'assets/images/check.png'
+                      : 'assets/images/cross.png',
+                  width: 120,
+                  height: 120,
+                ),
+              ),
+            ),
+
+          // Toast status bawah
+          if (_statusMessage.isNotEmpty)
+            Positioned(
+              bottom: 28,
+              left: 18,
+              right: 18,
+              child: _GlassToast(
+                message: _statusMessage,
+                color: _toastColorForStage(_stage),
+                icon: _iconForStage(_stage),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  // ==== Helper UI ==== //
+
+  Color _toastColorForStage(UiStage s) {
+    switch (s) {
+      case UiStage.detected:
+        return Colors.blue;
+      case UiStage.checking:
+      case UiStage.submitting:
+        return Colors.black54;
+      case UiStage.success:
+        return Colors.green;
+      case UiStage.error:
+        return Colors.red;
+      case UiStage.idle:
+      default:
+        return Colors.black54;
+    }
+  }
+
+  IconData _iconForStage(UiStage s) {
+    switch (s) {
+      case UiStage.detected:
+        return Icons.qr_code_scanner;
+      case UiStage.checking:
+        return Icons.hourglass_top;
+      case UiStage.submitting:
+        return Icons.cloud_upload;
+      case UiStage.success:
+        return Icons.check_circle;
+      case UiStage.error:
+        return Icons.error;
+      case UiStage.idle:
+      default:
+        return Icons.info_outline;
+    }
+  }
+
+  Widget _buildStepChips() {
+    int active = 0;
+    if (_stage == UiStage.detected) active = 1;
+    if (_stage == UiStage.checking) active = 2;
+    if (_stage == UiStage.submitting) active = 3;
+    if (_stage == UiStage.success || _stage == UiStage.error) active = 3;
+
+    Widget chip(String label, int step) {
+      final isActive = active >= step && active != 0;
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white.withOpacity(0.9) : Colors.white24,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white30),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isActive ? Icons.check_circle : Icons.circle_outlined,
+              size: 16,
+              color: isActive ? Colors.green.shade700 : Colors.white,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? Colors.black87 : Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        chip('Deteksi', 1),
+        chip('Cek', 2),
+        chip('Simpan', 3),
+      ],
+    );
+  }
+}
+
+// Overlay loading per tahap (tanpa ambil state, label statik → murah)
+class _StageOverlay extends StatelessWidget {
+  const _StageOverlay({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5),
+      child: Center(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.35),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                ),
+                SizedBox(width: 12),
+                _StageTexts(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StageTexts extends StatelessWidget {
+  const _StageTexts();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        Text('Sedang diproses...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        SizedBox(height: 2),
+        Text('Mohon tunggu', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w500)),
+      ],
+    );
+  }
+}
+
+// Toast kaca bawah
+class _GlassToast extends StatelessWidget {
+  final String message;
+  final Color color;
+  final IconData icon;
+
+  const _GlassToast({
+    Key? key,
+    required this.message,
+    required this.color,
+    required this.icon,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.72),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

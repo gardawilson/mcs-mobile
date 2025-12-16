@@ -9,7 +9,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart'; // Untuk validasi file
 
 class UpdateViewModel {
-  static const String _sharePath = "RU New/UpdateMobile-MCS";
+  static const String _sharePath = "MCS Mobile/mcs_update_mobile";
 
   Future<UpdateInfo?> checkForUpdate() async {
     SmbConnect? connect;

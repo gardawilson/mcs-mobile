@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mcs_mobile/views/stock_opname_input_bom_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../view_models/stock_opname_view_model.dart';
@@ -92,44 +93,111 @@ class StockOpnameListScreen extends StatelessWidget {
                 final stockOpname = viewModel.stockOpnameList[index];
 
                 return GestureDetector(
-                  onLongPress: () {
+                  onLongPress: stockOpname.isLocked ? null : () {
+                    // aksi long press kalau tidak terkunci
                   },
-                  onTap: () {
-                    // Navigasi ke detail jika tidak dalam mode seleksi
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => StockOpnameInputScreen(
-                          noSO: stockOpname.noSO,
-                          tgl: stockOpname.tgl,
+                  onTap: stockOpname.isLocked
+                      ? null
+                      : () {
+                    print("isBOM: ${stockOpname.isBOM}");
+                    if (stockOpname.isBOM) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              StockOpnameInputBOMScreen(
+                                noSO: stockOpname.noSO,
+                                tgl: stockOpname.tgl,
+                              ),
                         ),
-                      ),
-                    );
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              StockOpnameInputScreen(
+                                noSO: stockOpname.noSO,
+                                tgl: stockOpname.tgl,
+                              ),
+                        ),
+                      );
+                    }
                   },
                   child: Card(
                     elevation: 5,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    color: Colors.white,
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Header: NoSO and Tanggal
+                          // Header: NoSO and badges and Tanggal
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // NoSO
-                              Text(
-                                stockOpname.noSO,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1a1a1a),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      stockOpname.noSO,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1a1a1a),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+
+                                    const SizedBox(height: 4), // jarak antara teks dan badge
+
+                                    Row(
+                                      children: [
+                                        if (stockOpname.isBOM)
+                                          Container(
+                                            margin: const EdgeInsets.only(right: 6),
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue.shade700,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: const Text(
+                                              'BOM',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+
+                                        if (stockOpname.isLocked)
+                                          Container(
+                                            margin: const EdgeInsets.only(right: 6),
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.shade700,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              'LOCKED • ${stockOpname.lockedDate}',
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
-                              // Tanggal
+
                               Text(
                                 stockOpname.tgl,
                                 style: const TextStyle(
@@ -140,46 +208,46 @@ class StockOpnameListScreen extends StatelessWidget {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
 
-                          // Divider
+                          const SizedBox(height: 10),
                           const Divider(color: Colors.grey, thickness: 0.5),
 
                           // Companies
-                            const SizedBox(height: 10),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.business, color: Colors.blue, size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    stockOpname.companies.join(', '),
-                                    style: const TextStyle(fontSize: 14, color: Colors.black),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.business, color: Colors.blue, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  stockOpname.companies.join(', '),
+                                  style: const TextStyle(fontSize: 14, color: Colors.black),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
+                          ),
 
                           // Categories
-                            const SizedBox(height: 10),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.category, color: Colors.green, size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    stockOpname.categories.join(', '),
-                                    style: const TextStyle(fontSize: 14, color: Colors.black),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.category, color: Colors.green, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  stockOpname.categories.join(', '),
+                                  style: const TextStyle(fontSize: 14, color: Colors.black),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
+                          ),
 
                           // Locations
+                          if (stockOpname.locations.isNotEmpty) ...[
                             const SizedBox(height: 10),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
@@ -196,10 +264,12 @@ class StockOpnameListScreen extends StatelessWidget {
                               ],
                             ),
                           ],
+                        ],
                       ),
                     ),
                   ),
                 );
+
               },
               separatorBuilder: (context, index) => const SizedBox(height: 10),
             ),
